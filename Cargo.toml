@@ -1,6 +1,30 @@
 [package]
 name = "upnp-wan-exporter-rs"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+description = "A Prometheus exporter for router traffic metrics via UPnP"
+license = "MIT"
+repository = "https://github.com/your-username/upnp-wan-exporter-rs"
+keywords = ["upnp", "prometheus", "exporter", "router", "metrics"]
+categories = ["network-programming", "web-programming"]
+
+[[bin]]
+name = "upnp-wan-exporter-rs"
+path = "src/bin/upnp-wan-exporter-rs.rs"
+
+[lib]
+name = "upnp_wan_exporter_rs"
+path = "src/lib.rs"
 
 [dependencies]
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json"] }
+xml-rs = "0.8"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+prometheus = "0.13"
+lazy_static = "1.4"
+toml = "0.8"

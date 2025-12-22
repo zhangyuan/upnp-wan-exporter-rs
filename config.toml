@@ -1,0 +1,17 @@
+[server]
+# Server bind address
+bind_address = "0.0.0.0"
+# Server port  
+port = 9091
+
+[upnp]
+# UPnP discovery timeout in seconds
+discovery_timeout = 5
+# Metrics refresh interval in seconds
+refresh_interval = 30
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+# Enable JSON logging
+json = false
