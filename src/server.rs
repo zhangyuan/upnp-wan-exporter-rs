@@ -7,6 +7,23 @@ use axum::{
 };
 use serde::Deserialize;
 
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit_index = 0;
+    
+    while value >= 1024.0 && unit_index < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_index += 1;
+    }
+    
+    if unit_index == 0 {
+        format!("{} {}", bytes, UNITS[unit_index])
+    } else {
+        format!("{:.2} {}", value, UNITS[unit_index])
+    }
+}
+
 pub fn create_app() -> Router {
     Router::new()
         .route("/metrics", get(metrics_handler))
@@ -45,9 +62,11 @@ async fn stats_handler(Query(params): Query<StatsQuery>) -> Response {
             Some("json") => axum::response::Json(stats).into_response(),
             _ => {
                 let output = format!(
-                    "Bytes Sent: {}\nBytes Received: {}\nPackets Sent: {}\nPackets Received: {}\nConnection: {}",
+                    "Bytes Sent: {} / {}\nBytes Received: {} / {}\nPackets Sent: {}\nPackets Received: {}\nConnection: {}",
                     stats.bytes_sent,
+                    format_bytes(stats.bytes_sent),
                     stats.bytes_received,
+                    format_bytes(stats.bytes_received),
                     stats.packets_sent,
                     stats.packets_received,
                     stats.connection_status
