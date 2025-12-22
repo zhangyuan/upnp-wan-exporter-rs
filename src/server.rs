@@ -1,9 +1,9 @@
 use crate::metrics::MetricsCollector;
 use axum::{
+    Router,
     extract::Query,
     response::{IntoResponse, Response},
     routing::get,
-    Router,
 };
 use serde::Deserialize;
 
@@ -45,13 +45,13 @@ async fn stats_handler(Query(params): Query<StatsQuery>) -> Response {
             Some("json") => axum::response::Json(stats).into_response(),
             _ => {
                 let output = format!(
-                        "Bytes Sent: {}\nBytes Received: {}\nPackets Sent: {}\nPackets Received: {}\nConnection: {}",
-                        stats.bytes_sent,
-                        stats.bytes_received,
-                        stats.packets_sent,
-                        stats.packets_received,
-                        stats.connection_status
-                    );
+                    "Bytes Sent: {}\nBytes Received: {}\nPackets Sent: {}\nPackets Received: {}\nConnection: {}",
+                    stats.bytes_sent,
+                    stats.bytes_received,
+                    stats.packets_sent,
+                    stats.packets_received,
+                    stats.connection_status
+                );
 
                 axum::response::Response::builder()
                     .header("Content-Type", "text/plain")

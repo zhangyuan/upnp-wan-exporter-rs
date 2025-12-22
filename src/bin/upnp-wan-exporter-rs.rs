@@ -1,5 +1,5 @@
 use anyhow::Result;
-use upnp_wan_exporter_rs::{run_server, Config};
+use upnp_wan_exporter_rs::{Config, run_server};
 
 #[tokio::main]
 async fn main() -> Result<()> {

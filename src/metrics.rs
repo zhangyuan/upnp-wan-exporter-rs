@@ -50,8 +50,14 @@ impl MetricsCollector {
             Ok(()) => match client.get_traffic_stats().await {
                 Ok(stats) => {
                     Self::update_metrics(&stats);
-                    debug!("Updated metrics: bytes_sent={}, bytes_received={}, packets_sent={}, packets_received={}, connection={}", 
-                              stats.bytes_sent, stats.bytes_received, stats.packets_sent, stats.packets_received, stats.connection_status);
+                    debug!(
+                        "Updated metrics: bytes_sent={}, bytes_received={}, packets_sent={}, packets_received={}, connection={}",
+                        stats.bytes_sent,
+                        stats.bytes_received,
+                        stats.packets_sent,
+                        stats.packets_received,
+                        stats.connection_status
+                    );
                 }
                 Err(e) => {
                     error!("Failed to get traffic stats: {}", e);

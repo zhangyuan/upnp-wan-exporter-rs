@@ -4,7 +4,7 @@ pub mod server;
 pub mod upnp;
 
 pub use config::Config;
-pub use metrics::{init_metrics, MetricsCollector};
+pub use metrics::{MetricsCollector, init_metrics};
 pub use server::create_app;
 pub use upnp::{TrafficStats, UpnpClient, UpnpDevice};
 
