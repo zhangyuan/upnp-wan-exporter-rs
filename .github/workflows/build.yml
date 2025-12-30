@@ -61,7 +61,7 @@ jobs:
         path: artifacts/upnp-wan-exporter-rs-${{ matrix.arch }}-linux
         retention-days: 5
 
-  cross-compile:
+  build-arm:
     runs-on: ubuntu-latest
     strategy:
       matrix:
