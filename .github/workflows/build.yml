@@ -96,15 +96,16 @@ jobs:
     - name: Install cross-compilation tools
       run: |
         sudo apt-get update
+        # Add ARM architecture support
+        sudo dpkg --add-architecture armhf
+        sudo apt-get update
         sudo apt-get install -y gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
         
     - name: Install OpenSSL for ARM32
       run: |
-        sudo apt-get install -y libssl-dev:armhf
-        # Create symlinks for pkg-config to find the ARM32 libraries
-        sudo mkdir -p /usr/arm-linux-gnueabihf/lib
-        sudo ln -sf /usr/lib/arm-linux-gnueabihf/libssl.so.3 /usr/arm-linux-gnueabihf/lib/libssl.so
-        sudo ln -sf /usr/lib/arm-linux-gnueabihf/libcrypto.so.3 /usr/arm-linux-gnueabihf/lib/libcrypto.so
+        sudo apt-get install -y libssl-dev:armhf pkg-config:armhf
+        # Set up proper library paths for cross-compilation
+        export PKG_CONFIG_PATH="/usr/lib/arm-linux-gnueabihf/pkgconfig:$PKG_CONFIG_PATH"
     
     - name: Build for ARM32
       run: cargo build --release --verbose --target armv7-unknown-linux-gnueabihf
