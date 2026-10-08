@@ -1,41 +1,74 @@
 use crate::upnp::{TrafficStats, UpnpClient};
 use lazy_static::lazy_static;
-use prometheus::{Gauge, Registry, TextEncoder};
+use prometheus::{IntCounter, IntGauge, Registry, TextEncoder};
+use std::sync::Mutex;
 use tracing::debug;
 use tracing::error;
 
 lazy_static! {
     static ref REGISTRY: Registry = Registry::new();
-    static ref BYTES_SENT: Gauge = Gauge::new(
+    static ref BYTES_SENT: IntCounter = IntCounter::new(
         "upnp_wan_bytes_sent_total",
         "Total bytes sent through WAN connection"
     )
     .expect("metric can be created");
-    static ref BYTES_RECEIVED: Gauge = Gauge::new(
+    static ref BYTES_RECEIVED: IntCounter = IntCounter::new(
         "upnp_wan_bytes_received_total",
         "Total bytes received through WAN connection"
     )
     .expect("metric can be created");
-    static ref PACKETS_SENT: Gauge = Gauge::new(
+    static ref PACKETS_SENT: IntCounter = IntCounter::new(
         "upnp_wan_packets_sent_total",
         "Total packets sent through WAN connection"
     )
     .expect("metric can be created");
-    static ref PACKETS_RECEIVED: Gauge = Gauge::new(
+    static ref PACKETS_RECEIVED: IntCounter = IntCounter::new(
         "upnp_wan_packets_received_total",
         "Total packets received through WAN connection"
     )
     .expect("metric can be created");
-    static ref CONNECTION_STATUS: Gauge = Gauge::new(
+    static ref CONNECTION_STATUS: IntGauge = IntGauge::new(
         "upnp_wan_connection_status",
         "WAN connection status (1 = connected, 0 = disconnected)"
     )
     .expect("metric can be created");
-    static ref SCRAPE_ERROR: Gauge = Gauge::new(
+    static ref SCRAPE_ERROR: IntGauge = IntGauge::new(
         "upnp_wan_scrape_error",
         "Indicates if there was an error scraping UPnP metrics (1 = error, 0 = success)"
     )
     .expect("metric can be created");
+}
+
+/// The last raw totals read from the device. The router reports absolute
+/// cumulative values, so we track them to turn the readings into monotonic
+/// Prometheus counters (incrementing by the delta on each scrape).
+#[derive(Default)]
+struct LastRaw {
+    bytes_sent: u64,
+    bytes_received: u64,
+    packets_sent: u64,
+    packets_received: u64,
+}
+
+static LAST_RAW: Mutex<LastRaw> = Mutex::new(LastRaw {
+    bytes_sent: 0,
+    bytes_received: 0,
+    packets_sent: 0,
+    packets_received: 0,
+});
+
+/// Advance a counter to reflect a new absolute value read from the device.
+///
+/// When the device value drops (router reboot or counter wrap), the counter is
+/// reset and restarted from the new value.
+fn advance(counter: &IntCounter, previous: &mut u64, value: u64) {
+    if value >= *previous {
+        counter.inc_by(value - *previous);
+    } else {
+        counter.reset();
+        counter.inc_by(value);
+    }
+    *previous = value;
 }
 
 pub struct MetricsCollector;
@@ -62,18 +95,18 @@ impl MetricsCollector {
                 Err(e) => {
                     error!("Failed to get traffic stats: {}", e);
                     has_error = true;
-                    CONNECTION_STATUS.set(0.0);
+                    CONNECTION_STATUS.set(0);
                 }
             },
             Err(e) => {
                 error!("Failed to discover UPnP device: {}", e);
                 has_error = true;
-                CONNECTION_STATUS.set(0.0);
+                CONNECTION_STATUS.set(0);
             }
         }
 
         // Set error metric
-        SCRAPE_ERROR.set(if has_error { 1.0 } else { 0.0 });
+        SCRAPE_ERROR.set(if has_error { 1 } else { 0 });
 
         // Encode metrics in Prometheus format
         let encoder = TextEncoder::new();
@@ -89,14 +122,26 @@ impl MetricsCollector {
     }
 
     fn update_metrics(stats: &TrafficStats) {
-        BYTES_SENT.set(stats.bytes_sent as f64);
-        BYTES_RECEIVED.set(stats.bytes_received as f64);
-        PACKETS_SENT.set(stats.packets_sent as f64);
-        PACKETS_RECEIVED.set(stats.packets_received as f64);
+        {
+            let mut last = LAST_RAW.lock().expect("last raw mutex poisoned");
+            advance(&BYTES_SENT, &mut last.bytes_sent, stats.bytes_sent);
+            advance(
+                &BYTES_RECEIVED,
+                &mut last.bytes_received,
+                stats.bytes_received,
+            );
+            advance(&PACKETS_SENT, &mut last.packets_sent, stats.packets_sent);
+            advance(
+                &PACKETS_RECEIVED,
+                &mut last.packets_received,
+                stats.packets_received,
+            );
+        }
+
         CONNECTION_STATUS.set(if stats.connection_status == "Up" {
-            1.0
+            1
         } else {
-            0.0
+            0
         });
     }
 
@@ -138,4 +183,34 @@ pub fn init_metrics() {
     REGISTRY
         .register(Box::new(SCRAPE_ERROR.clone()))
         .expect("collector can be registered");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn advance_accumulates_deltas_and_handles_reset() {
+        let counter = IntCounter::new("test_total", "test counter").unwrap();
+        let mut previous = 0u64;
+
+        // First read jumps to the device's absolute total.
+        advance(&counter, &mut previous, 100);
+        assert_eq!(counter.get(), 100);
+
+        // Later readings add only the delta.
+        advance(&counter, &mut previous, 150);
+        assert_eq!(counter.get(), 150);
+
+        // Re-reading the same value does not change anything.
+        advance(&counter, &mut previous, 150);
+        assert_eq!(counter.get(), 150);
+
+        // Device reboot / counter wrap restarts the counter from the new value.
+        advance(&counter, &mut previous, 20);
+        assert_eq!(counter.get(), 20);
+
+        advance(&counter, &mut previous, 30);
+        assert_eq!(counter.get(), 30);
+    }
 }

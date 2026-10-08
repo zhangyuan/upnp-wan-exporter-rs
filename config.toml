@@ -1,3 +1,16 @@
 [server]
-# Server port  
+# Server port
 port = 9091
+
+[upnp]
+# By default the exporter finds the router with a multicast SSDP search, which
+# only reaches devices on the same network segment. If the router is one network
+# upstream (e.g. behind double NAT), point the exporter at it explicitly below.
+
+# Option 1 - restrict SSDP discovery to a specific host via a unicast search:
+host = "192.168.3.1"
+ssdp_port = 1900
+
+# Option 2 (most reliable) - give the full device description URL directly.
+# This skips SSDP discovery entirely:
+# location = "http://192.168.1.1:1900/igd.xml"

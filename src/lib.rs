@@ -3,7 +3,7 @@ pub mod metrics;
 pub mod server;
 pub mod upnp;
 
-pub use config::Config;
+pub use config::{Config, UpnpConfig};
 pub use metrics::{MetricsCollector, init_metrics};
 pub use server::create_app;
 pub use upnp::{TrafficStats, UpnpClient, UpnpDevice};
@@ -15,6 +15,9 @@ use std::net::SocketAddr;
 pub async fn run_server(config: Config) -> Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
+
+    // Apply UPnP discovery configuration (explicit host / location, if any).
+    upnp::configure(config.upnp.clone());
 
     // Initialize Prometheus metrics
     init_metrics();

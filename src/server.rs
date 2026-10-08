@@ -7,16 +7,19 @@ use axum::{
 };
 use serde::Deserialize;
 
+/// The dashboard page, embedded into the binary at compile time.
+const INDEX_HTML: &str = include_str!("../static/index.html");
+
 fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut value = bytes as f64;
     let mut unit_index = 0;
-    
+
     while value >= 1024.0 && unit_index < UNITS.len() - 1 {
         value /= 1024.0;
         unit_index += 1;
     }
-    
+
     if unit_index == 0 {
         format!("{} {}", bytes, UNITS[unit_index])
     } else {
@@ -26,9 +29,14 @@ fn format_bytes(bytes: u64) -> String {
 
 pub fn create_app() -> Router {
     Router::new()
+        .route("/", get(index_handler))
         .route("/metrics", get(metrics_handler))
         .route("/health", get(health_handler))
         .route("/stats", get(stats_handler))
+}
+
+async fn index_handler() -> impl IntoResponse {
+    axum::response::Html(INDEX_HTML)
 }
 
 async fn metrics_handler() -> Response {

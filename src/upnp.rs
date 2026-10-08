@@ -1,12 +1,15 @@
+use crate::config::UpnpConfig;
 use anyhow::{Result, anyhow};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tracing::{debug, error, warn};
 use xml::reader::{EventReader, XmlEvent};
 
 const UPNP_MULTICAST_ADDR: &str = "239.255.255.250:1900";
+const UPNP_SSDP_PORT: u16 = 1900;
 const UPNP_SEARCH_MSG: &str = concat!(
     "M-SEARCH * HTTP/1.1\r\n",
     "HOST: 239.255.255.250:1900\r\n",
@@ -14,6 +17,39 @@ const UPNP_SEARCH_MSG: &str = concat!(
     "ST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n",
     "MX: 3\r\n\r\n"
 );
+
+static CLIENT_CONFIG: OnceLock<UpnpConfig> = OnceLock::new();
+
+/// Set the configuration used by [`UpnpClient::new`]. Call once during startup.
+pub fn configure(config: UpnpConfig) {
+    let _ = CLIENT_CONFIG.set(config);
+}
+
+/// Resolve a (possibly relative) control URL against the device description URL.
+fn resolve_control_url(base_url: &str, control_url: &str) -> String {
+    if control_url.starts_with("http://") || control_url.starts_with("https://") {
+        control_url.to_string()
+    } else {
+        let path = if control_url.starts_with('/') {
+            control_url.to_string()
+        } else {
+            format!("/{}", control_url)
+        };
+        format!("{}{}", origin_of(base_url), path)
+    }
+}
+
+/// Return the `scheme://host[:port]` part of a URL.
+fn origin_of(url: &str) -> String {
+    match url.find("://") {
+        Some(scheme_end) => {
+            let rest = &url[scheme_end + 3..];
+            let host_end = rest.find('/').unwrap_or(rest.len());
+            format!("{}{}", &url[..scheme_end + 3], &rest[..host_end])
+        }
+        None => url.trim_end_matches('/').to_string(),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct UpnpDevice {
@@ -46,6 +82,9 @@ impl Default for TrafficStats {
 pub struct UpnpClient {
     client: Client,
     device: Option<UpnpDevice>,
+    explicit_location: Option<String>,
+    host: Option<String>,
+    ssdp_port: u16,
 }
 
 impl Default for UpnpClient {
@@ -56,68 +95,90 @@ impl Default for UpnpClient {
 
 impl UpnpClient {
     pub fn new() -> Self {
+        Self::with_config(CLIENT_CONFIG.get().cloned().unwrap_or_default())
+    }
+
+    /// Create a client with an explicit discovery configuration.
+    pub fn with_config(config: UpnpConfig) -> Self {
         Self {
             client: Client::new(),
             device: None,
+            explicit_location: config.location,
+            host: config.host,
+            ssdp_port: config.ssdp_port.unwrap_or(UPNP_SSDP_PORT),
         }
     }
 
     pub async fn discover_device(&mut self) -> Result<()> {
+        let location = match self.explicit_location.clone() {
+            Some(location) => {
+                debug!("Using configured device location: {}", location);
+                location
+            }
+            None => self.ssdp_discover().await?,
+        };
+
+        debug!("Found UPnP device at: {}", location);
+        self.device = Some(UpnpDevice {
+            location,
+            wan_common_service_url: None,
+            wan_ip_service_url: None,
+        });
+
+        // Get device description and find WAN service
+        self.setup_service().await?;
+
+        Ok(())
+    }
+
+    async fn ssdp_discover(&self) -> Result<String> {
         debug!("Starting UPnP device discovery");
 
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         socket.set_broadcast(true)?;
 
-        // Send SSDP discovery message
-        socket
-            .send_to(UPNP_SEARCH_MSG.as_bytes(), UPNP_MULTICAST_ADDR)
-            .await?;
+        // Multicast by default; unicast to a specific host when configured.
+        let target = match &self.host {
+            Some(host) => format!("{}:{}", host, self.ssdp_port),
+            None => UPNP_MULTICAST_ADDR.to_string(),
+        };
+        debug!("Sending SSDP M-SEARCH to {}", target);
 
-        let mut buf = [0; 1024];
+        socket.send_to(UPNP_SEARCH_MSG.as_bytes(), &target).await?;
 
-        // Wait for responses with timeout
+        let mut buf = [0; 2048];
+
+        // Wait for a response with timeout
         match tokio::time::timeout(Duration::from_secs(5), socket.recv_from(&mut buf)).await {
-            Ok(Ok((len, _addr))) => {
+            Ok(Ok((len, addr))) => {
                 let response = String::from_utf8_lossy(&buf[..len]);
-                debug!("Received SSDP response: {}", response);
+                debug!("Received SSDP response from {}: {}", addr, response);
 
-                // Parse location from response
-                if let Some(location) = self.extract_location(&response) {
-                    debug!("Found UPnP device at: {}", location);
-                    self.device = Some(UpnpDevice {
-                        location: location.clone(),
-                        wan_common_service_url: None,
-                        wan_ip_service_url: None,
-                    });
-
-                    // Get device description and find WAN service
-                    self.setup_service().await?;
-                }
+                self.extract_location(&response)
+                    .ok_or_else(|| anyhow!("SSDP response did not contain a LOCATION header"))
             }
             Ok(Err(e)) => {
                 error!("Socket error during discovery: {}", e);
-                return Err(anyhow!("Socket error: {}", e));
+                Err(anyhow!("Socket error: {}", e))
             }
             Err(_) => {
                 warn!("No UPnP devices found within timeout");
-                return Err(anyhow!("Discovery timeout"));
+                Err(anyhow!("Discovery timeout"))
             }
         }
-
-        Ok(())
     }
 
     fn extract_location(&self, response: &str) -> Option<String> {
         for line in response.lines() {
             if line.to_lowercase().starts_with("location:") {
-                return line
-                    .split(':')
-                    .skip(1)
-                    .collect::<Vec<_>>()
-                    .join(":")
-                    .trim()
-                    .to_string()
-                    .into();
+                return Some(
+                    line.split(':')
+                        .skip(1)
+                        .collect::<Vec<_>>()
+                        .join(":")
+                        .trim()
+                        .to_string(),
+                );
             }
         }
         None
@@ -128,13 +189,14 @@ impl UpnpClient {
             .device
             .as_ref()
             .ok_or_else(|| anyhow!("No device found"))?;
+        let location = device.location.clone();
 
-        debug!("Fetching device description from: {}", device.location);
-        let desc_response = self.client.get(&device.location).send().await?;
+        debug!("Fetching device description from: {}", location);
+        let desc_response = self.client.get(&location).send().await?;
         let desc_xml = desc_response.text().await?;
 
         // Parse XML to find WAN service URLs
-        let (wan_common_url, wan_ip_url) = self.parse_service_urls(&desc_xml, &device.location)?;
+        let (wan_common_url, wan_ip_url) = self.parse_service_urls(&desc_xml, &location)?;
 
         if let Some(ref mut dev) = self.device {
             dev.wan_common_service_url = wan_common_url;
@@ -147,7 +209,7 @@ impl UpnpClient {
     fn parse_service_urls(
         &self,
         xml: &str,
-        _base_url: &str,
+        base_url: &str,
     ) -> Result<(Option<String>, Option<String>)> {
         let mut reader = EventReader::from_str(xml);
         let mut wan_common_url: Option<String> = None;
@@ -173,19 +235,11 @@ impl UpnpClient {
                 Ok(XmlEvent::EndElement { name }) => match name.local_name.as_str() {
                     "service" => {
                         if current_service_type.contains("WANCommonInterfaceConfig") {
-                            let full_url = if current_control_url.starts_with("http") {
-                                current_control_url.clone()
-                            } else {
-                                format!("http://192.168.3.1:1900{}", current_control_url)
-                            };
+                            let full_url = resolve_control_url(base_url, &current_control_url);
                             debug!("Found WANCommonInterfaceConfig service at: {}", full_url);
                             wan_common_url = Some(full_url);
                         } else if current_service_type.contains("WANIPConnection") {
-                            let full_url = if current_control_url.starts_with("http") {
-                                current_control_url.clone()
-                            } else {
-                                format!("http://192.168.3.1:1900{}", current_control_url)
-                            };
+                            let full_url = resolve_control_url(base_url, &current_control_url);
                             debug!("Found WANIPConnection service at: {}", full_url);
                             wan_ip_url = Some(full_url);
                         }
@@ -434,5 +488,43 @@ impl UpnpClient {
         }
 
         Err(anyhow!("Element {} not found in response", element_name))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_of_strips_path_and_keeps_port() {
+        assert_eq!(
+            origin_of("http://192.168.1.1:1900/igd.xml"),
+            "http://192.168.1.1:1900"
+        );
+        assert_eq!(
+            origin_of("http://192.168.1.1/desc.xml"),
+            "http://192.168.1.1"
+        );
+        assert_eq!(
+            origin_of("https://router.local:5000/a/b/c"),
+            "https://router.local:5000"
+        );
+    }
+
+    #[test]
+    fn resolve_control_url_handles_relative_and_absolute() {
+        let base = "http://192.168.1.1:1900/igd.xml";
+        assert_eq!(
+            resolve_control_url(base, "/upnp/control/wan"),
+            "http://192.168.1.1:1900/upnp/control/wan"
+        );
+        assert_eq!(
+            resolve_control_url(base, "upnp/control/wan"),
+            "http://192.168.1.1:1900/upnp/control/wan"
+        );
+        assert_eq!(
+            resolve_control_url(base, "http://10.0.0.1:5000/ctl"),
+            "http://10.0.0.1:5000/ctl"
+        );
     }
 }
