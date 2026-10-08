@@ -96,6 +96,9 @@
       <div class="range" id="range">
         <button data-range="1800">30m</button>
         <button data-range="3600" class="active">1h</button>
+        <button data-range="21600">6h</button>
+        <button data-range="86400">24h</button>
+        <button data-range="172800">48h</button>
       </div>
     </div>
     <canvas id="chart"></canvas>
@@ -148,14 +151,45 @@
   }
 
   // ---- Client-side history: nothing is stored on the server ----
-  const MAX_WINDOW = 3600;   // keep up to 1 hour of points in memory
-  let rangeSecs = 3600;      // currently displayed window
-  let points = [];           // { t, bytes_sent, bytes_received }
+  const MAX_WINDOW = 172800;  // keep up to 48 hours of points in memory
+  const MAX_POINTS = 100000;  // safety cap (48h at 5s is ~34.5k points)
+  let rangeSecs = 3600;       // currently displayed window
+  let points = [];            // { t, bytes_sent, bytes_received }
 
   function niceCeil(v) {
     let p = 1;
     while (p < v) p *= 2;
     return p;
+  }
+
+  // Human-friendly "time ago" label for the X axis.
+  function formatAgo(secondsAgo) {
+    if (secondsAgo < 60) return "now";
+    if (secondsAgo < 3600) return "-" + Math.round(secondsAgo / 60) + "m";
+    if (secondsAgo < 86400) {
+      const h = secondsAgo / 3600;
+      return "-" + (h < 10 ? h.toFixed(1) : Math.round(h)) + "h";
+    }
+    return "-" + (secondsAgo / 86400).toFixed(1) + "d";
+  }
+
+  // Reduce the number of points so the line is never denser than roughly one
+  // point per pixel. Each pixel column keeps the peak, so spikes stay visible
+  // even over long ranges.
+  function downsample(series, maxPoints) {
+    if (series.length <= maxPoints) return series;
+    const bucket = Math.ceil(series.length / maxPoints);
+    const out = [];
+    for (let i = 0; i < series.length; i += bucket) {
+      const end = Math.min(i + bucket, series.length);
+      let rx = 0, tx = 0;
+      for (let j = i; j < end; j++) {
+        if (series[j].rx > rx) rx = series[j].rx;
+        if (series[j].tx > tx) tx = series[j].tx;
+      }
+      out.push({ t: series[end - 1].t, rx: rx, tx: tx });
+    }
+    return out;
   }
 
   function drawChart() {
@@ -200,8 +234,12 @@
     const plotW = Math.max(10, cssW - pad.left - pad.right);
     const plotH = Math.max(10, cssH - pad.top - pad.bottom);
 
+    // Never draw more points than the chart is wide: aggregate each pixel
+    // column (keeping the peak) so long ranges stay readable and fast.
+    const drawSeries = downsample(series, Math.max(2, Math.floor(plotW)));
+
     let maxVal = 0;
-    series.forEach(function (s) { maxVal = Math.max(maxVal, s.rx, s.tx); });
+    drawSeries.forEach(function (s) { maxVal = Math.max(maxVal, s.rx, s.tx); });
     const niceMax = niceCeil(maxVal > 0 ? maxVal : 1);
 
     const xFor = function (t) { return pad.left + ((t - start) / rangeSecs) * plotW; };
@@ -231,13 +269,12 @@
     ctx.fillStyle = "#64748b";
     for (let i = 0; i <= 4; i++) {
       const t = start + rangeSecs * i / 4;
-      const minsAgo = Math.round((now - t) / 60);
-      ctx.fillText(minsAgo <= 0 ? "now" : "-" + minsAgo + "m", xFor(t), pad.top + plotH + 6);
+      ctx.fillText(formatAgo(now - t), xFor(t), pad.top + plotH + 6);
     }
 
     function drawLine(key, color) {
       ctx.beginPath();
-      series.forEach(function (s, i) {
+      drawSeries.forEach(function (s, i) {
         const x = xFor(s.t);
         const y = yFor(s[key]);
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
@@ -285,6 +322,7 @@
       }
       const cutoff = t - MAX_WINDOW;
       while (points.length && points[0].t < cutoff) points.shift();
+      while (points.length > MAX_POINTS) points.shift();
 
       drawChart();
     } catch (e) {
