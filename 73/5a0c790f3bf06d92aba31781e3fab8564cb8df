@@ -1,0 +1,24 @@
+static/index.html
+  s_7d2b0c347552da::t_a78d8b0ab074f2 154-157,165-193
+  s_7d2b0c347552da::t_949b34e7258165 325
+  s_7d2b0c347552da::t_3bf2481d8b7279 272,277
+  s_7d2b0c347552da::t_7ec4fa004c7331 99-101
+  s_7d2b0c347552da::t_001e29f7604c54 237-240,242
+  s_7d2b0c347552da::t_48bb7b5f1fe756 194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "735a0c790f3bf06d92aba31781e3fab8564cb8df",
+  "prompts": {},
+  "sessions": {
+    "s_7d2b0c347552da": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ee3a49a6bffej3AXH37RmjXNqW",
+        "model": "unknown"
+      },
+      "human_author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  }
+}
