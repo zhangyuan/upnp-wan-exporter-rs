@@ -1,0 +1,50 @@
+src/config.rs
+  s_7d2b0c347552da::t_51f2a54e63e61f 6-7,15-39,43-44
+config.toml
+  s_7d2b0c347552da::t_5ae443fa56e665 2-10,12-16
+  h_f49d52fcc53581 11
+src/server.rs
+  s_7d2b0c347552da::t_81e0223ecd916a 17,22,32
+  s_7d2b0c347552da::t_0b8baad58773b8 38-39
+  s_7d2b0c347552da::t_743c096cf33ce7 10-11
+  s_7d2b0c347552da::t_0ff4e82412270f 12
+  s_7d2b0c347552da::t_3c93c543637088 40-41
+src/lib.rs
+  s_7d2b0c347552da::t_00a50172b45e72 6
+  s_7d2b0c347552da::t_b69d8cb83b3065 19-21
+static/index.html
+  s_7d2b0c347552da::t_32352a371fb29e 1-314
+src/upnp.rs
+  s_7d2b0c347552da::t_829127236c2f35 85-87,98-102,106-108,113-134,140-145,149,151,153,155-158,162,166,174-181,192,194-195,199
+  s_7d2b0c347552da::t_ffc27e210c63bf 1,5,12,21-26
+  s_7d2b0c347552da::t_aadc55d118e9d7 147,503-510
+  s_7d2b0c347552da::t_ef39cf9ae73532 212
+  s_7d2b0c347552da::t_4c59cf7b417bf0 28-53
+  s_7d2b0c347552da::t_6ed8088202ddd1 493-502,511-530
+  s_7d2b0c347552da::t_9d49c87c1a34ce 238,242
+  s_7d2b0c347552da::t_4d6a63714566bb 27,146
+src/metrics.rs
+  s_7d2b0c347552da::t_6bd83d19f4dc4d 142,144
+  s_7d2b0c347552da::t_4e988815f21e0f 3-4,10,15,20,25,30,35,42-73,98,104,109,125-140,187-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61932e2e04f509eb763ea1919959abdae1f176c8",
+  "prompts": {},
+  "humans": {
+    "h_f49d52fcc53581": {
+      "author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_7d2b0c347552da": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ee3a49a6bffej3AXH37RmjXNqW",
+        "model": "unknown"
+      },
+      "human_author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  }
+}
