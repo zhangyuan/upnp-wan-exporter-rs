@@ -1,0 +1,18 @@
+.cargo/config.toml
+  h_f49d52fcc53581 4-6,8-9
+.github/workflows/build.yml
+  h_f49d52fcc53581 64
+Cargo.toml
+  h_f49d52fcc53581 45-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "22fe4d90604e52f2ee3001181336b88b2155530c",
+  "prompts": {},
+  "humans": {
+    "h_f49d52fcc53581": {
+      "author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  }
+}
