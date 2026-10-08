@@ -1,0 +1,14 @@
+src/bin/upnp-wan-exporter-rs.rs
+  h_f49d52fcc53581 12-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64825116806b49b77e6c35806668e254831e9840",
+  "prompts": {},
+  "humans": {
+    "h_f49d52fcc53581": {
+      "author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  }
+}
