@@ -9,5 +9,6 @@ async fn main() -> Result<()> {
         Config::default()
     });
 
-    run_server(config).await
+    run_server(config).await?;
+    Ok(())
 }
