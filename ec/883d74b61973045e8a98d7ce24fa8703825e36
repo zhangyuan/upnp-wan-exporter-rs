@@ -1,0 +1,14 @@
+.gitignore
+  h_f49d52fcc53581 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec883d74b61973045e8a98d7ce24fa8703825e36",
+  "prompts": {},
+  "humans": {
+    "h_f49d52fcc53581": {
+      "author": "Yuan Zhang <zhangyuan@users.noreply.github.com>"
+    }
+  }
+}
